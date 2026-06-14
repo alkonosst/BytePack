@@ -1,0 +1,17 @@
+{
+  "name": "BytePack",
+  "version": "0.1.0",
+  "authors": {
+    "name": "Maximiliano Ramirez",
+    "email": "maximiliano.ramirezbravo@gmail.com"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/alkonosst/BytePack.git"
+  },
+  "description": "Header-only C++17 serialization library with zero dynamic allocation. One io() per struct drives serialize, deserialize and compile-time sizing, little-endian. Quant and Bytes types, headers and dispatch. Pairs with ByteFrame for stream framing.",
+  "keywords": "serialization, deserialization, binary, pack, unpack, message, protocol, wire, frame, little-endian, constexpr, header-only, embedded, arduino, esp32, static",
+  "license": "MIT",
+  "frameworks": "*",
+  "headers": ["BytePack.h"]
+}

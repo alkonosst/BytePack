@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 190" width="240" height="190">
+  <!-- top face -->
+  <polygon points="120,20 190,55 120,90 50,55" fill="#FCD34D"/>
+  <!-- left face -->
+  <polygon points="50,55 120,90 120,170 50,135" fill="#F59E0B"/>
+  <!-- right face -->
+  <polygon points="190,55 120,90 120,170 190,135" fill="#B45309"/>
+  <!-- packing tape across the top -->
+  <polygon points="78,69 148,34 162,41 92,76" fill="#0F172A" opacity="0.15"/>
+  <!-- bit pattern on left face (skewed onto the iso plane) -->
+  <g transform="matrix(1,0.5,0,1,0,0)" fill="#FFFFFF" opacity="0.45">
+    <rect x="60"  y="48" width="10" height="10" rx="2"/>
+    <rect x="90"  y="48" width="10" height="10" rx="2"/>
+    <rect x="105" y="48" width="10" height="10" rx="2"/>
+    <rect x="75"  y="68" width="10" height="10" rx="2"/>
+    <rect x="90"  y="68" width="10" height="10" rx="2"/>
+  </g>
+  <!-- bit pattern on right face -->
+  <g transform="matrix(1,-0.5,0,1,0,0)" fill="#FFFFFF" opacity="0.35">
+    <rect x="132" y="162" width="10" height="10" rx="2"/>
+    <rect x="162" y="162" width="10" height="10" rx="2"/>
+    <rect x="147" y="182" width="10" height="10" rx="2"/>
+    <rect x="177" y="182" width="10" height="10" rx="2"/>
+  </g>
+</svg>
