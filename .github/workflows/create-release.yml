@@ -1,5 +1,6 @@
-# When a semantic version tag is pushed (e.g. v1.2.3): run CI as a gate, then create the GitHub
-# release and publish the package to the PlatformIO Registry.
+# When a semantic version tag is pushed (e.g. v1.2.3): create the GitHub release and publish the
+# package to the PlatformIO Registry.
+# NOTE: no CI is run for release tags, so make sure to create a tag only after the CI has passed on the main branch.
 name: Release
 
 on:
@@ -11,12 +12,7 @@ permissions:
   contents: read
 
 jobs:
-  # Gate: build examples + run native tests on the tagged commit (no Codecov on tags).
-  ci:
-    uses: alkonosst/templates/.github/workflows/reusable-pio-ci.yml@v1
-
   release:
-    needs: ci
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -24,7 +20,6 @@ jobs:
       - uses: alkonosst/templates/.github/actions/release@v1
 
   publish:
-    needs: ci
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
