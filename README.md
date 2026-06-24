@@ -16,6 +16,9 @@
     <img src="https://badges.registry.platformio.org/packages/alkonosst/library/BytePack.svg" alt="PlatformIO Registry">
   </a>
   <br><br>
+  <a href="https://codecov.io/github/alkonosst/BytePack">
+    <img src="https://img.shields.io/codecov/c/github/alkonosst/BytePack?style=for-the-badge&logo=codecov&logoColor=white&labelColor=F01F7A" alt="Coverage">
+  </a>
   <a href="https://opensource.org/licenses/MIT">
     <img src="https://img.shields.io/badge/license-MIT-blue.svg?style=for-the-badge&color=blue" alt="License">
   </a>
@@ -35,6 +38,7 @@
 - [Installation](#installation)
   - [PlatformIO](#platformio)
   - [Arduino IDE](#arduino-ide)
+  - [CMake](#cmake)
 - [Usage](#usage)
   - [Including the library](#including-the-library)
   - [Namespace](#namespace)
@@ -58,7 +62,7 @@
 
 # Description
 
-**BytePack** is a header-only C++17 Arduino library for serializing plain C++ structs into compact, portable byte buffers. A message is any struct that lists its fields in a single `io()` member function; that one function drives serialization, deserialization and compile-time size counting, so the field list is written once and can never get out of sync.
+**BytePack** is a header-only C++17 Arduino/Native library for serializing plain C++ structs into compact, portable byte buffers. A message is any struct that lists its fields in a single `io()` member function; that one function drives serialization, deserialization and compile-time size counting, so the field list is written once and can never get out of sync.
 
 The wire format is explicit little-endian with no padding, making it safe to exchange between different architectures (ESP32, ARM, a PC on the other end of a link, etc.). All buffers are caller-provided and statically sized; there is no dynamic memory allocation.
 
@@ -150,6 +154,23 @@ lib_deps =
 2. Go to **Sketch > Manage Libraries...**
 3. Search for **"BytePack"**.
 4. Click **Install**.
+
+## CMake
+
+For desktop C++ projects, pull the library with `FetchContent` and link the `alkonosst::BytePack`
+target:
+
+```cmake
+include(FetchContent)
+FetchContent_Declare(
+  BytePack
+  GIT_REPOSITORY https://github.com/alkonosst/BytePack.git
+  GIT_TAG        vx.y.z # pin a release tag (recommended), or a branch/commit
+)
+FetchContent_MakeAvailable(BytePack)
+
+target_link_libraries(your_app PRIVATE alkonosst::BytePack)
+```
 
 # Usage
 
