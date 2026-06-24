@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.14)
-project(BytePack VERSION 0.1.0 LANGUAGES CXX)
+project(BytePack VERSION 0.2.0 LANGUAGES CXX)
 
 # Create an INTERFACE library.
 add_library(BytePack INTERFACE)
