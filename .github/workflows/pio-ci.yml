@@ -1,0 +1,20 @@
+# Run the reusable PlatformIO CI on every pull request and on pushes to main.
+# Uploads coverage to Codecov (badge tracks main, PRs get the coverage diff).
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  pull-requests: write # allows the format-suggest job to post review suggestions
+
+jobs:
+  ci:
+    uses: alkonosst/templates/.github/workflows/reusable-pio-ci.yml@v1
+    with:
+      upload-codecov: true
+    secrets:
+      codecov-token: ${{ secrets.CODECOV_TOKEN }}
