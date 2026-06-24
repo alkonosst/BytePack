@@ -31,9 +31,10 @@
  *   truncation of valid messages and single-byte corruption.
  */
 
-#include <Arduino.h>
+#ifdef ARDUINO
+#  include <Arduino.h>
+#endif
 
-#define UNITY_INCLUDE_DOUBLE
 #include <unity.h>
 
 #include <BytePack.h>
@@ -133,6 +134,25 @@ struct MsgNested {
   }
 };
 
+// Named dispatch handler reused by every dispatch test. Each distinct lambda type is its own
+// dispatch<>/tryDispatch<> instantiation, so funneling the tests through a single handler type
+// keeps the template's branch coverage tractable (one instantiation per message, fully exercised).
+struct DispatchRecorder {
+  bool ping_handled    = false;
+  bool data_handled    = false;
+  uint8_t ping_counter = 0;
+  uint16_t data_value  = 0;
+
+  void operator()(const MsgPing& msg) {
+    ping_handled = true;
+    ping_counter = msg.counter;
+  }
+  void operator()(const MsgData& msg) {
+    data_handled = true;
+    data_value   = msg.value;
+  }
+};
+
 /* ---------------------------------------------------------------------------------------------- */
 /*                                          Custom types                                          */
 /* ---------------------------------------------------------------------------------------------- */
@@ -205,6 +225,10 @@ void test_type_quant_saturation() {
   // Below min -> saturates to min raw value
   q = -400.0f;
   TEST_ASSERT_EQUAL_INT16(-32768, q.getRaw());
+
+  // Negative, non-saturating value: exercises the "round half away from zero" negative branch
+  q = -12.34f;
+  TEST_ASSERT_EQUAL_INT16(-1234, q.getRaw());
 
   // NaN -> 0
   q = NAN;
@@ -399,6 +423,10 @@ void test_writer_custom_types() {
   w.reset();
   TEST_ASSERT_TRUE(w.isOk());
   TEST_ASSERT_EQUAL(0, w.getSize());
+
+  // set() rejects a payload larger than this capacity (Bytes<uint8_t, 5>)
+  uint8_t oversized[6] = {};
+  TEST_ASSERT_FALSE(msg.b.set(oversized, sizeof(oversized)));
 }
 
 void test_writer_overflow() {
@@ -425,6 +453,24 @@ void test_writer_overflow() {
   w.reset();
   TEST_ASSERT_TRUE(w.isOk());
   TEST_ASSERT_EQUAL(0, w.getSize());
+}
+
+void test_writer_bytes_overflow() {
+  // A Bytes payload whose length prefix fits but whose data does not must fail without writing a
+  // partial payload; and the writer must stay in error if it is already failed when it reaches the
+  // Bytes field.
+  Msg2 msg{};
+  msg.q          = 1.0f;
+  uint8_t src[5] = {1, 2, 3, 4, 5};
+  TEST_ASSERT_TRUE(msg.b.set(src, sizeof(src)));
+
+  // Quant (2) + length prefix (1) fit in 4 bytes, but the 5 data bytes overflow
+  uint8_t small[4] = {};
+  TEST_ASSERT_EQUAL(0, serialize(msg, small, sizeof(small)));
+
+  // Buffer too small even for the Quant: the writer is already in error when it reaches the Bytes
+  uint8_t tiny[1] = {};
+  TEST_ASSERT_EQUAL(0, serialize(msg, tiny, sizeof(tiny)));
 }
 
 /* ---------------------------------------------------------------------------------------------- */
@@ -614,6 +660,25 @@ void test_serialize() {
   TEST_ASSERT_EQUAL(0, serialize(big, small, sizeof(small)));
 }
 
+void test_serialize_overflow() {
+  // serialize() must report 0 when the destination cannot hold the message. Exercising it for every
+  // message type also covers the failure side of serialize()'s "isOk() ? size : 0" per instantiation.
+  uint8_t buffer[1] = {};
+
+  MsgPing ping{};
+  TEST_ASSERT_EQUAL(0, serialize(ping, buffer, 0)); // needs 1 byte
+
+  Msg2 custom{};
+  custom.q = 1.0f;
+  TEST_ASSERT_EQUAL(0, serialize(custom, buffer, sizeof(buffer))); // needs >= 3 bytes
+
+  MsgArray arr{};
+  TEST_ASSERT_EQUAL(0, serialize(arr, buffer, sizeof(buffer))); // needs 6 bytes
+
+  MsgNested nested{};
+  TEST_ASSERT_EQUAL(0, serialize(nested, buffer, sizeof(buffer))); // needs 2 bytes
+}
+
 void test_deserialize() {
   const uint8_t buffer[1] = {77};
 
@@ -654,6 +719,21 @@ void test_serialize_with_header() {
   for (size_t i = 0; i < written; i++) {
     TEST_ASSERT_EQUAL(expected[i], buffer[i]);
   }
+
+  // deserializeWithHeader round-trip and every header-mismatch path (covers the MsgData header check)
+  MsgData out{};
+  TEST_ASSERT_TRUE(deserializeWithHeader(out, buffer, written));
+  TEST_ASSERT_EQUAL_UINT16(0x1234, out.value);
+
+  buffer[0] = 0x00; // wrong ID
+  TEST_ASSERT_FALSE(deserializeWithHeader(out, buffer, written));
+  buffer[0] = MsgData::ID;
+
+  buffer[1] = 0x00; // wrong VERSION
+  TEST_ASSERT_FALSE(deserializeWithHeader(out, buffer, written));
+  buffer[1] = MsgData::VERSION;
+
+  TEST_ASSERT_FALSE(deserializeWithHeader(out, buffer, 1)); // too short for the header
 
   // Buffer too small for header + fields -> returns 0
   TEST_ASSERT_EQUAL(0, serializeWithHeader(in, buffer, 3));
@@ -700,54 +780,69 @@ void test_peek_id_and_version() {
   TEST_ASSERT_FALSE(peekVersion(buffer, 1, version));
 }
 
+// Runs every dispatch path for a given handler: each candidate matching and not matching, unknown
+// ID, wrong VERSION (per message), truncated body (per message), the fold short-circuit and the
+// too-short frame. After it returns, a MsgPing and a MsgData frame have each been routed once.
+template <typename Handler>
+void exerciseAllDispatchBranches(Handler& handler) {
+  uint8_t ping_frame[3] = {MsgPing::ID, MsgPing::VERSION, 7};
+  uint8_t data_frame[8] = {MsgData::ID, MsgData::VERSION, 0x09, 0x03, 0, 0, 0, 0}; // value = 777
+
+  // MsgData matches (first candidate fails the ID check, second matches and deserializes)
+  TEST_ASSERT_TRUE((dispatch<MsgPing, MsgData>(data_frame, sizeof(data_frame), handler)));
+
+  // MsgPing matches (first candidate matches, short-circuiting the fold before MsgData is tried)
+  TEST_ASSERT_TRUE((dispatch<MsgPing, MsgData>(ping_frame, sizeof(ping_frame), handler)));
+
+  // Unknown ID -> no candidate matches
+  data_frame[0] = 0x00;
+  TEST_ASSERT_FALSE((dispatch<MsgPing, MsgData>(data_frame, sizeof(data_frame), handler)));
+  data_frame[0] = MsgData::ID;
+
+  // Right ID, wrong VERSION (MsgData) -> rejected
+  data_frame[1] = 0xFF;
+  TEST_ASSERT_FALSE((dispatch<MsgPing, MsgData>(data_frame, sizeof(data_frame), handler)));
+  data_frame[1] = MsgData::VERSION;
+
+  // Matching header but truncated body (MsgData needs 6 body bytes) -> rejected
+  TEST_ASSERT_FALSE((dispatch<MsgPing, MsgData>(data_frame, 3, handler)));
+
+  // Right ID, wrong VERSION (MsgPing) -> rejected
+  ping_frame[1] = MsgPing::VERSION + 1;
+  TEST_ASSERT_FALSE((dispatch<MsgPing, MsgData>(ping_frame, sizeof(ping_frame), handler)));
+  ping_frame[1] = MsgPing::VERSION;
+
+  // Matching header but truncated body (MsgPing needs 1 body byte) -> rejected
+  TEST_ASSERT_FALSE((dispatch<MsgPing, MsgData>(ping_frame, 2, handler)));
+
+  // Too short for the header -> rejected
+  TEST_ASSERT_FALSE((dispatch<MsgPing, MsgData>(data_frame, 1, handler)));
+}
+
 void test_dispatch() {
-  FloatInt f_union;
-  f_union.f = 0.5f;
+  DispatchRecorder rec;
+  exerciseAllDispatchBranches(rec);
 
-  // [ID][VERSION][value LE][ratio LE]
-  uint8_t buffer[8] = {
-    MsgData::ID,
-    MsgData::VERSION,
-    0x09, // value = 777 (LSB)
-    0x03, // value (MSB)
-    uint8_t(f_union.u & 0xFF),
-    uint8_t((f_union.u >> 8) & 0xFF),
-    uint8_t((f_union.u >> 16) & 0xFF),
-    uint8_t((f_union.u >> 24) & 0xFF),
-  };
+  TEST_ASSERT_TRUE(rec.ping_handled);
+  TEST_ASSERT_TRUE(rec.data_handled);
+  TEST_ASSERT_EQUAL_UINT8(7, rec.ping_counter);
+  TEST_ASSERT_EQUAL_UINT16(777, rec.data_value);
+}
 
+void test_dispatch_overloaded() {
+  // Overloaded is the ergonomic public handler; exercise every dispatch branch through it so both
+  // the API and its template instantiation are fully covered.
   bool ping_handled = false;
   bool data_handled = false;
-
-  auto handler = Overloaded{
+  auto handler      = Overloaded{
     [&](const MsgPing&) { ping_handled = true; },
-    [&](const MsgData& m) { data_handled = (m.value == 777); },
+    [&](const MsgData&) { data_handled = true; },
   };
 
-  // Matching ID and VERSION -> the right handler runs
-  TEST_ASSERT_TRUE((dispatch<MsgPing, MsgData>(buffer, sizeof(buffer), handler)));
-  TEST_ASSERT_FALSE(ping_handled);
+  exerciseAllDispatchBranches(handler);
+
+  TEST_ASSERT_TRUE(ping_handled);
   TEST_ASSERT_TRUE(data_handled);
-
-  // Unknown ID -> no handler runs
-  data_handled = false;
-  buffer[0]    = 0xFF;
-  TEST_ASSERT_FALSE((dispatch<MsgPing, MsgData>(buffer, sizeof(buffer), handler)));
-  TEST_ASSERT_FALSE(ping_handled);
-  TEST_ASSERT_FALSE(data_handled);
-  buffer[0] = MsgData::ID;
-
-  // Wrong VERSION -> no handler runs
-  buffer[1] = MsgData::VERSION + 1;
-  TEST_ASSERT_FALSE((dispatch<MsgPing, MsgData>(buffer, sizeof(buffer), handler)));
-  buffer[1] = MsgData::VERSION;
-
-  // Known header but truncated body -> rejected
-  TEST_ASSERT_FALSE((dispatch<MsgPing, MsgData>(buffer, sizeof(buffer) - 1, handler)));
-
-  // Empty / header-only input -> rejected
-  TEST_ASSERT_FALSE((dispatch<MsgPing, MsgData>(buffer, 0, handler)));
-  TEST_ASSERT_FALSE((dispatch<MsgPing, MsgData>(buffer, 2, handler)));
 }
 
 /* ---------------------------------------------------------------------------------------------- */
@@ -856,15 +951,11 @@ void test_round_trip_with_header_and_dispatch() {
   TEST_ASSERT_EQUAL_UINT16(in.value, out.value);
   TEST_ASSERT_EQUAL_FLOAT(in.ratio, out.ratio);
 
-  // Dispatch to the right handler
-  bool handled = false;
-  TEST_ASSERT_TRUE((dispatch<MsgPing, MsgData>(buffer,
-    written,
-    Overloaded{
-      [&](const MsgPing&) {},
-      [&](const MsgData& m) { handled = (m.value == 777); },
-    })));
-  TEST_ASSERT_TRUE(handled);
+  // Dispatch to the right handler (shared recorder type, see test_dispatch)
+  DispatchRecorder rec;
+  TEST_ASSERT_TRUE((dispatch<MsgPing, MsgData>(buffer, written, rec)));
+  TEST_ASSERT_TRUE(rec.data_handled);
+  TEST_ASSERT_EQUAL_UINT16(777, rec.data_value);
 }
 
 /* ---------------------------------------------------------------------------------------------- */
@@ -887,6 +978,7 @@ void test_stress_garbage_input() {
   stress_state = 0xA5A5A5A5;
 
   uint8_t buffer[24];
+  DispatchRecorder rec;
 
   for (uint32_t i = 0; i < STRESS_ITERATIONS; i++) {
     const size_t len = nextRandom() % (sizeof(buffer) + 1); // 0..24
@@ -900,12 +992,7 @@ void test_stress_garbage_input() {
     deserialize(msg, buffer, len);
     TEST_ASSERT_TRUE(msg.b.getLength() <= msg.b.getCapacity());
 
-    dispatch<MsgPing, MsgData>(buffer,
-      len,
-      Overloaded{
-        [](const MsgPing&) {},
-        [](const MsgData&) {},
-      });
+    dispatch<MsgPing, MsgData>(buffer, len, rec);
   }
 }
 
@@ -1014,13 +1101,18 @@ void test_stress_truncate_and_corrupt() {
 }
 
 /* ---------------------------------------------------------------------------------------------- */
-/*                                          setup / loop                                          */
+/*                                             Runners                                            */
 /* ---------------------------------------------------------------------------------------------- */
 
-void setup() {
-  Serial.begin(115200);
-  delay(2000);
+void setUp(void) {
+  // set stuff up here
+}
 
+void tearDown(void) {
+  // clean stuff up here
+}
+
+int runUnityTests(void) {
   UNITY_BEGIN();
 
   // Custom types
@@ -1034,6 +1126,7 @@ void setup() {
   RUN_TEST(test_writer_common_types);
   RUN_TEST(test_writer_custom_types);
   RUN_TEST(test_writer_overflow);
+  RUN_TEST(test_writer_bytes_overflow);
 
   // Reader
   RUN_TEST(test_reader_initial_state);
@@ -1046,11 +1139,13 @@ void setup() {
 
   // Helpers / dispatch
   RUN_TEST(test_serialize);
+  RUN_TEST(test_serialize_overflow);
   RUN_TEST(test_deserialize);
   RUN_TEST(test_serialize_with_header);
   RUN_TEST(test_deserialize_with_header);
   RUN_TEST(test_peek_id_and_version);
   RUN_TEST(test_dispatch);
+  RUN_TEST(test_dispatch_overloaded);
 
   // Round-trip
   RUN_TEST(test_round_trip_common_types);
@@ -1063,7 +1158,17 @@ void setup() {
   RUN_TEST(test_stress_round_trip);
   RUN_TEST(test_stress_truncate_and_corrupt);
 
-  UNITY_END();
+  return UNITY_END();
 }
 
+// For native
+int main(void) { return runUnityTests(); }
+
+// For Arduino framework
+#ifdef ARDUINO
+void setup() {
+  delay(2000);
+  runUnityTests();
+}
 void loop() {}
+#endif
