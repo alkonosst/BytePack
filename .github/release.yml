@@ -1,0 +1,22 @@
+# Configuration for custom generating release notes based on PR labels.
+# Combined with the PR labeling workflow, this allows to automatically generate
+# release notes with categorized sections based on the PR labels.
+changelog:
+  exclude:
+    labels:
+      - ignore-for-release
+    authors:
+      - dependabot
+  categories:
+    - title: Breaking Changes
+      labels: [breaking-change]
+    - title: New Features
+      labels: [feat]
+    - title: Bug Fixes
+      labels: [fix]
+    - title: Documentation
+      labels: [docs]
+    - title: Maintenance
+      labels: [chore, ci, refactor]
+    - title: Other Changes
+      labels: ["*"]

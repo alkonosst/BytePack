@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Questions and discussions
+    url: https://github.com/alkonosst/BytePack/discussions
+    about: Ask questions and discuss usage here instead of opening an issue.
+  - name: Support the project
+    url: https://ko-fi.com/alkonosst
+    about: If this library helps you, consider supporting its development.

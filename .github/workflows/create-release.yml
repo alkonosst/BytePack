@@ -1,0 +1,37 @@
+# When a semantic version tag is pushed (e.g. v1.2.3): run CI as a gate, then create the GitHub
+# release and publish the package to the PlatformIO Registry.
+name: Release
+
+on:
+  push:
+    tags:
+      - "v[0-9]+.[0-9]+.[0-9]+"
+
+permissions:
+  contents: read
+
+jobs:
+  # Gate: build examples + run native tests on the tagged commit (no Codecov on tags).
+  ci:
+    uses: alkonosst/templates/.github/workflows/reusable-pio-ci.yml@v1
+
+  release:
+    needs: ci
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: alkonosst/templates/.github/actions/release@v1
+
+  publish:
+    needs: ci
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - uses: alkonosst/templates/.github/actions/setup-python@v1
+      - uses: alkonosst/templates/.github/actions/setup-pio@v1
+      - uses: alkonosst/templates/.github/actions/pio-publish@v1
+        with:
+          auth-token: ${{ secrets.PLATFORMIO_AUTH_TOKEN }}

@@ -1,4 +1,7 @@
+.claude
 .pio
 .vscode
+build
+coverage
 logs
 CLAUDE.md

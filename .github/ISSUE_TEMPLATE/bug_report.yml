@@ -1,0 +1,91 @@
+name: Bug report
+description: Report a problem with the library.
+title: "[bug]: "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: Thanks for taking the time to report a bug. Please fill out the sections below.
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Preliminary checks
+      options:
+        - label: I searched existing issues and this bug has not been reported yet.
+          required: true
+        - label: I am using the latest released version of the library.
+          required: false
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: A clear and concise description of what the bug is.
+    validations:
+      required: true
+
+  - type: input
+    id: library-version
+    attributes:
+      label: Library version
+      placeholder: e.g. 1.2.0
+    validations:
+      required: true
+
+  - type: input
+    id: board
+    attributes:
+      label: Board / MCU
+      placeholder: e.g. ESP32-S3-DevKitC-1, STM32F103C8, Native
+    validations:
+      required: true
+
+  - type: dropdown
+    id: framework
+    attributes:
+      label: Framework
+      options:
+        - Arduino
+        - Native (host)
+        - Other
+    validations:
+      required: true
+
+  - type: input
+    id: pio-version
+    attributes:
+      label: PlatformIO Core version
+      description: Output of "pio --version".
+      placeholder: e.g. 6.1.16
+    validations:
+      required: false
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to reproduce
+      description: A minimal sketch/example and the steps to trigger the bug.
+      placeholder: |
+        1. Flash the sketch below.
+        2. Open the serial monitor.
+        3. ...
+      render: cpp
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs / serial output
+      description: Paste any relevant build or runtime output. This is rendered as a code block.
+      render: shell
+    validations:
+      required: false
