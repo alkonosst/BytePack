@@ -662,7 +662,8 @@ void test_serialize() {
 
 void test_serialize_overflow() {
   // serialize() must report 0 when the destination cannot hold the message. Exercising it for every
-  // message type also covers the failure side of serialize()'s "isOk() ? size : 0" per instantiation.
+  // message type also covers the failure side of serialize()'s "isOk() ? size : 0" per
+  // instantiation.
   uint8_t buffer[1] = {};
 
   MsgPing ping{};
@@ -720,7 +721,8 @@ void test_serialize_with_header() {
     TEST_ASSERT_EQUAL(expected[i], buffer[i]);
   }
 
-  // deserializeWithHeader round-trip and every header-mismatch path (covers the MsgData header check)
+  // deserializeWithHeader round-trip and every header-mismatch path (covers the MsgData header
+  // check)
   MsgData out{};
   TEST_ASSERT_TRUE(deserializeWithHeader(out, buffer, written));
   TEST_ASSERT_EQUAL_UINT16(0x1234, out.value);
